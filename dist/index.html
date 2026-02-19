@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Session Viewer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+    }
+    .app {
+      display: flex;
+      height: 100vh;
+    }
+    .sidebar {
+      width: 300px;
+      background: white;
+      border-right: 1px solid #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .search-box {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .session-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+    .list-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: #666;
+    }
+    .toggle-btn {
+      padding: 4px 8px;
+      font-size: 11px;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .session-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .session-item:hover {
+      background: #f9f9f9;
+    }
+    .session-item.active {
+      background: #e3f2fd;
+      border-left: 3px solid #2196f3;
+    }
+    .session-name {
+      font-weight: 500;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    .session-time {
+      font-size: 12px;
+      color: #999;
+    }
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: white;
+    }
+    .toolbar {
+      padding: 16px;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .toolbar-left, .toolbar-right {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .session-info {
+      font-size: 14px;
+      color: #666;
+      font-weight: 500;
+    }
+    .btn {
+      padding: 8px 16px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: white;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .btn:hover {
+      background: #f5f5f5;
+      border-color: #999;
+    }
+    .btn.primary {
+      background: #2196f3;
+      color: white;
+      border-color: #2196f3;
+    }
+    .btn.primary:hover {
+      background: #1976d2;
+    }
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 0 16px;
+    }
+    .tab {
+      padding: 12px 16px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .tab:hover {
+      color: #2196f3;
+    }
+    .tab.active {
+      color: #2196f3;
+      border-bottom-color: #2196f3;
+    }
+    .content-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+    .empty-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #999;
+      font-size: 16px;
+    }
+    .message {
+      margin-bottom: 16px;
+      padding: 12px;
+      border-radius: 4px;
+      line-height: 1.6;
+    }
+    .message.user {
+      background: #e3f2fd;
+      margin-left: 40px;
+    }
+    .message.assistant {
+      background: #f5f5f5;
+      margin-right: 40px;
+    }
+    .message-role {
+      font-weight: 600;
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+    .message-content {
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-overlay.show {
+      display: flex;
+    }
+    .modal {
+      background: white;
+      padding: 24px;
+      border-radius: 8px;
+      min-width: 300px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    .modal h3 {
+      margin-bottom: 16px;
+      font-size: 16px;
+    }
+    .rename-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    .modal-buttons {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <input type="text" class="search-box" id="searchInput" placeholder="搜索会话...">
+      </div>
+      <div class="session-list">
+        <div class="list-header">
+          <span id="listTitle">活跃</span>
+          <button class="toggle-btn" id="toggleBtn">显示归档</button>
+        </div>
+        <div id="sessionList"></div>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <button class="btn primary" id="exportBtn">导出为 Markdown</button>
+          <button class="btn" id="refreshBtn">刷新</button>
+        </div>
+        <div class="toolbar-right" id="toolbarRight" style="display: none;">
+          <span class="session-info" id="sessionName"></span>
+          <button class="btn" id="renameBtn">重命名</button>
+          <button class="btn" id="archiveBtn">归档</button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" data-view="chat">对话视图</div>
+        <div class="tab" data-view="timeline">时间线</div>
+      </div>
+
+      <div class="content-area" id="contentArea">
+        <div class="empty-state">选择一个会话开始</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal">
+    <div class="modal">
+      <h3>重命名会话</h3>
+      <input type="text" class="rename-input" id="renameInput" placeholder="输入新名称">
+      <div class="modal-buttons">
+        <button class="btn" id="cancelBtn">取消</button>
+        <button class="btn primary" id="saveBtn">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const app = {
+      sessions: [],
+      currentSession: null,
+      sessionNames: {},
+      archived: [],
+      showArchived: false,
+      currentView: 'chat',
+
+      async init() {
+        await this.loadSessions();
+        await this.loadSessionNames();
+        await this.loadArchived();
+        this.setupEventListeners();
+        this.renderSessionList();
+      },
+
+      async loadSessions() {
+        try {
+          const response = await fetch('/api/sessions');
+          this.sessions = await response.json();
+        } catch (error) {
+          console.error('Failed to load sessions:', error);
+          alert('加载会话失败: ' + error.message);
+        }
+      },
+
+      async loadSessionNames() {
+        try {
+          const response = await fetch('/api/session-names');
+          this.sessionNames = await response.json();
+        } catch (error) {
+          console.error('Failed to load session names:', error);
+        }
+      },
+
+      async loadArchived() {
+        try {
+          const response = await fetch('/api/archived');
+          this.archived = await response.json();
+        } catch (error) {
+          console.error('Failed to load archived:', error);
+        }
+      },
+
+      getSessionName(id) {
+        return this.sessionNames[id] || id.substring(0, 8);
+      },
+
+      formatDate(date) {
+        return new Date(date).toLocaleString('zh-CN');
+      },
+
+      renderSessionList() {
+        const list = document.getElementById('sessionList');
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+
+        const filtered = this.sessions.filter(s => {
+          const isArch = this.archived.includes(s.id);
+          return this.showArchived ? isArch : !isArch;
+        }).filter(s =>
+          this.getSessionName(s.id).toLowerCase().includes(searchTerm)
+        );
+
+        list.innerHTML = filtered.map(session => `
+          <div class="session-item ${this.currentSession?.id === session.id ? 'active' : ''}" data-id="${session.id}">
+            <div class="session-name">${this.getSessionName(session.id)}</div>
+            <div class="session-time">${this.formatDate(session.modified)}</div>
+          </div>
+        `).join('');
+
+        list.querySelectorAll('.session-item').forEach(item => {
+          item.addEventListener('click', () => this.selectSession(item.dataset.id));
+        });
+      },
+
+      async selectSession(id) {
+        try {
+          const response = await fetch(`/api/sessions/${id}`);
+          this.currentSession = await response.json();
+          this.renderContent();
+          this.renderSessionList();
+          this.updateToolbar();
+        } catch (error) {
+          console.error('Failed to load session:', error);
+          alert('加载会话失败: ' + error.message);
+        }
+      },
+
+      renderContent() {
+        const area = document.getElementById('contentArea');
+        if (!this.currentSession) return;
+
+        if (this.currentSession.messages.length === 0) {
+          area.innerHTML = '<div class="empty-state">此会话没有对话内容</div>';
+          return;
+        }
+
+        if (this.currentView === 'chat') {
+          area.innerHTML = this.currentSession.messages.map(msg => `
+            <div class="message ${msg.role}">
+              <div class="message-role">${msg.role}</div>
+              <div class="message-content">${this.escapeHtml(msg.content)}</div>
+            </div>
+          `).join('');
+        } else {
+          area.innerHTML = this.currentSession.messages.map(msg => `
+            <div style="margin-bottom: 16px;">
+              <div style="font-size: 12px; color: #999; margin-bottom: 4px;">${msg.timestamp || 'N/A'}</div>
+              <div style="background: #f5f5f5; padding: 12px; border-radius: 4px; font-size: 14px;">
+                <strong>${msg.role}</strong>: ${this.escapeHtml(msg.content.substring(0, 100))}...
+              </div>
+            </div>
+          `).join('');
+        }
+      },
+
+      updateToolbar() {
+        const toolbar = document.getElementById('toolbarRight');
+        const sessionName = document.getElementById('sessionName');
+        const archiveBtn = document.getElementById('archiveBtn');
+
+        if (this.currentSession) {
+          toolbar.style.display = 'flex';
+          sessionName.textContent = this.getSessionName(this.currentSession.id);
+          archiveBtn.textContent = this.archived.includes(this.currentSession.id) ? '取消归档' : '归档';
+        } else {
+          toolbar.style.display = 'none';
+        }
+      },
+
+      escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      },
+
+      setupEventListeners() {
+        document.getElementById('searchInput').addEventListener('input', () => this.renderSessionList());
+        document.getElementById('toggleBtn').addEventListener('click', () => {
+          this.showArchived = !this.showArchived;
+          document.getElementById('listTitle').textContent = this.showArchived ? '已归档' : '活跃';
+          document.getElementById('toggleBtn').textContent = this.showArchived ? '显示活跃' : '显示归档';
+          this.renderSessionList();
+        });
+        document.getElementById('refreshBtn').addEventListener('click', async () => {
+          await this.loadSessions();
+          await this.loadSessionNames();
+          await this.loadArchived();
+          this.renderSessionList();
+        });
+        document.getElementById('exportBtn').addEventListener('click', () => this.exportMarkdown());
+        document.getElementById('renameBtn').addEventListener('click', () => this.showRenameDialog());
+        document.getElementById('archiveBtn').addEventListener('click', () => this.toggleArchive());
+        document.getElementById('cancelBtn').addEventListener('click', () => this.hideModal());
+        document.getElementById('saveBtn').addEventListener('click', () => this.saveRename());
+        document.getElementById('modal').addEventListener('click', (e) => {
+          if (e.target.id === 'modal') this.hideModal();
+        });
+
+        document.querySelectorAll('.tab').forEach(tab => {
+          tab.addEventListener('click', (e) => {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            e.target.classList.add('active');
+            this.currentView = e.target.dataset.view;
+            this.renderContent();
+          });
+        });
+      },
+
+      showRenameDialog() {
+        document.getElementById('renameInput').value = this.sessionNames[this.currentSession.id] || '';
+        document.getElementById('modal').classList.add('show');
+      },
+
+      hideModal() {
+        document.getElementById('modal').classList.remove('show');
+      },
+
+      async saveRename() {
+        try {
+          const newName = document.getElementById('renameInput').value;
+          const response = await fetch(`/api/session-names/${this.currentSession.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName })
+          });
+          if (!response.ok) throw new Error('Failed to save');
+          this.sessionNames[this.currentSession.id] = newName;
+          this.hideModal();
+          this.renderSessionList();
+          this.updateToolbar();
+        } catch (error) {
+          alert('保存失败: ' + error.message);
+        }
+      },
+
+      async toggleArchive() {
+        try {
+          const isArch = this.archived.includes(this.currentSession.id);
+          const response = await fetch(`/api/archived/${this.currentSession.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ archive: !isArch })
+          });
+          if (!response.ok) throw new Error('Failed to save');
+          await this.loadArchived();
+          this.renderSessionList();
+          this.updateToolbar();
+        } catch (error) {
+          alert('操作失败: ' + error.message);
+        }
+      },
+
+      exportMarkdown() {
+        if (!this.currentSession) return;
+        let md = `# ${this.getSessionName(this.currentSession.id)}\n\n`;
+        this.currentSession.messages.forEach(msg => {
+          md += `## ${msg.role}\n\n${msg.content}\n\n`;
+        });
+        const blob = new Blob([md], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${this.getSessionName(this.currentSession.id)}.md`;
+        a.click();
+      }
+    };
+
+    app.init();
+  </script>
+</body>
+</html>
