@@ -179,6 +179,53 @@ app.post('/api/archived/:id', (req, res) => {
   }
 });
 
+// 搜索会话内容
+app.get('/api/search', (req, res) => {
+  const keyword = (req.query.q || '').toLowerCase();
+  if (!keyword) return res.json([]);
+
+  try {
+    const files = fs.readdirSync(CLAUDE_PROJECTS_DIR).filter(f => f.endsWith('.jsonl'));
+    const results = [];
+
+    for (const f of files) {
+      const filePath = path.join(CLAUDE_PROJECTS_DIR, f);
+      const content = fs.readFileSync(filePath, 'utf-8');
+      if (!content.toLowerCase().includes(keyword)) continue;
+
+      const sessionId = f.replace('.jsonl', '');
+      const lines = content.trim().split('\n');
+      let snippet = '';
+
+      for (const line of lines) {
+        try {
+          const obj = JSON.parse(line);
+          if (!obj.message || !obj.message.content) continue;
+          const msgContent = typeof obj.message.content === 'string'
+            ? obj.message.content
+            : Array.isArray(obj.message.content)
+              ? obj.message.content.map(c => c.text || '').join(' ')
+              : '';
+          const idx = msgContent.toLowerCase().indexOf(keyword);
+          if (idx !== -1) {
+            const start = Math.max(0, idx - 40);
+            const end = Math.min(msgContent.length, idx + keyword.length + 40);
+            snippet = (start > 0 ? '...' : '') + msgContent.substring(start, end) + (end < msgContent.length ? '...' : '');
+            break;
+          }
+        } catch (e) {}
+      }
+
+      results.push({ id: sessionId, snippet });
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error('Search error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 静态文件服务
 app.use(express.static(path.join(__dirname, 'dist')));
 

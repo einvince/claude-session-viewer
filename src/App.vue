@@ -6,8 +6,21 @@
           v-model="searchTerm"
           type="text"
           class="search-box"
-          placeholder="搜索会话..."
+          placeholder="搜索会话名称..."
+          @input="contentSearchResults = null"
         >
+        <div class="content-search">
+          <input
+            v-model="contentSearchTerm"
+            type="text"
+            class="search-box"
+            placeholder="搜索会话内容..."
+            @keyup.enter="searchContent"
+          >
+          <button class="search-btn" @click="searchContent" :disabled="contentSearching">
+            {{ contentSearching ? '搜索中...' : '搜索' }}
+          </button>
+        </div>
       </div>
       <div class="session-list">
         <div class="list-header">
@@ -23,6 +36,7 @@
           @click="selectSession(session.id)"
         >
           <div class="session-name">{{ getSessionName(session.id) }}</div>
+          <div v-if="session.snippet" class="session-snippet">{{ session.snippet }}</div>
           <div class="session-time">{{ formatDate(session.modified) }}</div>
         </div>
       </div>
@@ -117,6 +131,9 @@ const archived = ref([])
 const showArchived = ref(false)
 const showRename = ref(false)
 const renameInput = ref('')
+const contentSearchTerm = ref('')
+const contentSearchResults = ref(null)
+const contentSearching = ref(false)
 
 const API_BASE = window.location.origin
 
@@ -125,17 +142,29 @@ const isArchived = computed(() => {
 })
 
 const filteredSessions = computed(() => {
+  // 如果有内容搜索结果，优先显示
+  if (contentSearchResults.value) {
+    const resultIds = new Set(contentSearchResults.value.map(r => r.id))
+    const snippetMap = Object.fromEntries(contentSearchResults.value.map(r => [r.id, r.snippet]))
+    return sessions.value
+      .filter(s => resultIds.has(s.id))
+      .map(s => ({ ...s, snippet: snippetMap[s.id] }))
+  }
+
   const filtered = sessions.value.filter(s => {
     const isArch = archived.value.includes(s.id)
-    return showArchived ? isArch : !isArch
+    return showArchived.value ? isArch : !isArch
   })
+  if (!searchTerm.value) return filtered
   return filtered.filter(s =>
     (sessionNames.value[s.id] || s.name).toLowerCase().includes(searchTerm.value.toLowerCase())
   )
 })
 
 const getSessionName = (id) => {
-  return sessionNames.value[id] || id.substring(0, 8)
+  const alias = sessionNames.value[id]
+  if (alias) return `${alias} (${id.substring(0, 8)})`
+  return id.substring(0, 8)
 }
 
 const loadSessionNames = async () => {
@@ -216,6 +245,23 @@ const saveRename = async () => {
   }
 }
 
+const searchContent = async () => {
+  if (!contentSearchTerm.value.trim()) {
+    contentSearchResults.value = null
+    return
+  }
+  contentSearching.value = true
+  try {
+    const response = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(contentSearchTerm.value)}`)
+    contentSearchResults.value = await response.json()
+  } catch (error) {
+    console.error('Content search failed:', error)
+    alert('搜索失败: ' + error.message)
+  } finally {
+    contentSearching.value = false
+  }
+}
+
 const exportMarkdown = () => {
   if (!currentSession.value) return
   let md = `# ${getSessionName(currentSession.value.id)}\n\n`
@@ -261,6 +307,46 @@ onMounted(() => {
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 14px;
+  box-sizing: border-box;
+}
+
+.content-search {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.content-search .search-box {
+  flex: 1;
+}
+
+.search-btn {
+  padding: 8px 12px;
+  border: 1px solid #2196f3;
+  background: #2196f3;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.search-btn:hover:not(:disabled) {
+  background: #1976d2;
+}
+
+.search-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.session-snippet {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-list {
